@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Impostor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-white min-h-screen flex items-center justify-center">
+  <div class="w-full max-w-xl p-6">
+    <header class="mb-6 flex items-center justify-between">
+      <h1 class="text-3xl font-bold">Impostor</h1>
+      <button id="leaveBtn" class="hidden px-3 py-2 rounded bg-slate-800">Salir</button>
+    </header>
+
+    <section id="menu" class="space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <button id="createGame" class="px-4 py-3 rounded bg-emerald-600">Crear partida</button>
+        <button id="joinGame" class="px-4 py-3 rounded bg-indigo-600">Unirse a partida</button>
+      </div>
+    </section>
+
+    <section id="game" class="hidden space-y-4">
+      <div>
+        <div>Código: <span id="lobbyCode"></span></div>
+        <div>Estado: <span id="statusLabel">—</span></div>
+      </div>
+      <div id="roleBanner"></div>
+      <div>Palabra: <span id="secretWord">—</span></div>
+      <div id="playersList"></div>
+      <div id="votePanel"></div>
+      <div id="whoVoted"></div>
+    </section>
+
+  </div>
+
+  <script type="module" src="./firebase.js"></script>
+  <script type="module" src="./app.js" defer></script>
+</body>
+</html>
