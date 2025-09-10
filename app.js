@@ -105,7 +105,7 @@ async function leaveLobby(silent=false) {
       }
     }
   } catch {}
-  currentLobby = null; isHost = false; cachedLobby = null;
+  currentLobby = null; cachedLobby = null;
   if (unsubscribeLobby) unsubscribeLobby();
   unsubscribeLobby = null;
   $("game").classList.add("hidden");
@@ -123,7 +123,6 @@ async function closeLobby() {
     // Salir del lobby localmente
     currentLobby = null;
     cachedLobby = null;
-    isHost = false;
 
     if (unsubscribeLobby) unsubscribeLobby();
     unsubscribeLobby = null;
@@ -136,7 +135,6 @@ async function closeLobby() {
 
 // RENDERIZAR LOBBY
 function renderLobby(lobby) {
-  $("statusLabel").textContent = lobby.status;
   const me = lobby.players?.[myPlayerId];
   const isImpostor = !!me?.isImpostor;
 if(lobby.status === "playing" || lobby.status === "reveal") {
