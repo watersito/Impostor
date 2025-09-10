@@ -257,7 +257,7 @@ async function promptWordAndStart(lobby) {
 function renderVotes(lobby) {
   const votePanel = $("votePanel"); const whoVoted = $("whoVoted");
   votePanel.innerHTML = ""; whoVoted.innerHTML = "";
-  if (lobby.status !== "playing" || lobby.status !== "reveal") {
+  if (lobby.status !== "playing" ) {
     votePanel.textContent = "La votación estará disponible cuando inicie la partida.";
     return;
   }
