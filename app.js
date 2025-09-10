@@ -259,10 +259,15 @@ function renderVotes(lobby) {
   const roundKey = String(lobby.round || 1);
   const votes = lobby.votes?.[roundKey] || {};
   const players = Object.values(lobby.players || {}).sort((a,b)=>a.joinedAt-b.joinedAt);
+  const title = document.createElement("h3");
+  title.textContent = "Elige a quién quieres votar:";
+  title.className = "text-lg font-semibold mb-2 text-gray-800";
+  votePanel.appendChild(title);
   players.filter(p => !p.eliminated).forEach(p => {
     if(p.id === myPlayerId) return;
     const btn = document.createElement("button");
-    btn.textContent = "Votar a " + p.name;
+    btn.className = "block w-auto my-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:bg-gray-400";
+    btn.textContent = p.name;
     btn.disabled = !!votes[myPlayerId];
     btn.onclick = () => castVote(p.id);
     votePanel.appendChild(btn);
@@ -296,7 +301,7 @@ async function checkVotesAndResult() {
 
   if(Object.keys(votes).length < players.length) return;
 
-  // Contar votos
+  // Contar votos 
   const voteCounts = {};
   Object.values(votes).forEach(v => voteCounts[v] = (voteCounts[v] || 0) + 1);
 
@@ -314,12 +319,12 @@ async function checkVotesAndResult() {
 
   if(votedOutId === impostor.id) {
     result = "ciudadanos";
-    alert("¡Los ciudadanos han ganado! El impostor fue eliminado.");
+    // alert("¡Los ciudadanos han ganado! El impostor fue eliminado.");
   } else {
     const aliveCitizens = players.filter(p => !p.isImpostor);
     if(aliveCitizens.length -1 <= 1) {
       result = "impostor";
-      alert("¡El impostor ha ganado!");
+      // alert("¡El impostor ha ganado!");
     } else {
       await update(ref(db, `lobbies/${currentLobby}/players/${votedOutId}`), { eliminated: true });
       await update(ref(db, `lobbies/${currentLobby}`), { round: lobby.round + 1 });
