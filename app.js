@@ -23,7 +23,9 @@ function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 // CREAR / UNIRSE A LOBBY
 $("createGame").onclick = async () => {
-  myName = prompt("Tu nombre:") || "Jugador";
+  let nameInput = prompt("Tu nombre (máx. 10 caracteres):")?.trim();
+  if (!nameInput) nameInput = "Jugador";
+  myName = nameInput.slice(0, 10);
   const code = randomCode();
   await createLobby(code, myName);
   enterLobby(code);
@@ -32,7 +34,9 @@ $("createGame").onclick = async () => {
 $("joinGame").onclick = async () => {
   const code = (prompt("Código:")||"").trim().toUpperCase();
   if (!code) return;
-  myName = prompt("Tu nombre:") || "Jugador";
+  let nameInput = prompt("Tu nombre (máx. 10 caracteres):")?.trim();
+  if (!nameInput) nameInput = "Jugador";
+  myName = nameInput.slice(0, 10);
   const ok = await joinLobby(code, myName);
   if (!ok) { alert("Lobby no existe o no se puede unir."); return; }
   enterLobby(code);
@@ -197,6 +201,7 @@ if (iAmHost && (lobby.status === "lobby" || lobby.status === "reveal")) {    con
   if(lobby.status === "reveal") {
     const winner = lobby.winner;
     $("roleBanner").textContent = winner === "ciudadanos" ? "¡Ciudadanos ganan!" : "¡Impostor gana!";
+
   }
 }
 
@@ -252,7 +257,7 @@ async function promptWordAndStart(lobby) {
 function renderVotes(lobby) {
   const votePanel = $("votePanel"); const whoVoted = $("whoVoted");
   votePanel.innerHTML = ""; whoVoted.innerHTML = "";
-  if (lobby.status !== "playing") {
+  if (lobby.status !== "playing" || lobby.status !== "reveal") {
     votePanel.textContent = "La votación estará disponible cuando inicie la partida.";
     return;
   }
