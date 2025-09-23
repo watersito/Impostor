@@ -1,22 +1,25 @@
 import { db } from "./firebase.js";
-import { ref, set, get, update, remove, onValue, onDisconnect, child } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-database.js";
+import { ref, set, get, update, remove, onValue, onDisconnect, child} from "https://www.gstatic.com/firebasejs/10.12.3/firebase-database.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+
 
 const $ = id => document.getElementById(id);
-let myPlayerId = getOrCreateUID();
+const auth = getAuth();
+let myPlayerId = null;
+
+signInAnonymously(auth).catch(err => console.error(err));
+
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    myPlayerId = user.uid;
+  }
+});
 let myName = null;
 let currentLobby = null;
 let unsubscribeLobby = null;
 let cachedLobby = null;
 
-function getOrCreateUID() {
-  const key = "impostor_uid_v3";
-  let id = localStorage.getItem(key);
-  if (!id) {
-    id = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    localStorage.setItem(key, id);
-  }
-  return id;
-}
+
 
 function randomCode() { return Math.random().toString(36).substring(2,6).toUpperCase(); }
 function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
@@ -60,7 +63,7 @@ async function createLobby(code, playerName) {
     results: {} 
   });
   const pRef = ref(db, `lobbies/${code}/players/${myPlayerId}`);
-  onDisconnect(pRef).remove();
+  onDisconnect(pRef).update({ connected: false });
 }
 
 // UNIRSE A LOBBY
@@ -72,7 +75,7 @@ async function joinLobby(code, playerName) {
   if (lobby.status !== "lobby") return false;
   const playerRef = ref(db, `lobbies/${code}/players/${myPlayerId}`);
   await set(playerRef, { id: myPlayerId, name: playerName, isImpostor: false, joinedAt: Date.now() });
-  onDisconnect(playerRef).remove();
+  onDisconnect(playerRef).update({ connected: false });
   return true;
 }
 
@@ -89,6 +92,9 @@ function enterLobby(code) {
     if (!snap.exists()) { alert("Lobby eliminado"); return leaveLobby(true); }
     const lobby = snap.val(); cachedLobby = lobby; renderLobby(lobby);
   });
+  const playerRef = ref(db, `lobbies/${code}/players/${myPlayerId}`);
+  update(playerRef, { connected: true });
+
 }
 
 // SALIR DEL LOBBY
@@ -142,8 +148,8 @@ function renderLobby(lobby) {
   const me = lobby.players?.[myPlayerId];
   const isImpostor = !!me?.isImpostor;
 if(lobby.status === "playing" || lobby.status === "reveal") {
-    $("roleBanner").textContent = isImpostor ? "IMPOSTOR" : "CIUDADANO";
-    $("roleBanner").style.color = isImpostor ? "red" : "green";
+    $("roleBanner").textContent = "" //isImpostor ? "IMPOSTOR" : "CIUDADANO";
+    $("secretWord").style.color = isImpostor ? "red" : "green";
 } else {
     $("roleBanner").textContent = "En el lobby";
     $("roleBanner").style.color = "black";
