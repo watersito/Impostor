@@ -316,8 +316,9 @@ function renderLobby(lobby) {
 
 async function hostStartGame(lobby) {
   const players = Object.values(lobby.players);
-  const alivePlayers = players.filter(p => !p.eliminated);
-  const chooser = pickRandom(alivePlayers).id;
+  // Para nueva partida, todos juegan (no solo los que sobrevivieron)
+  const chooser = pickRandom(players).id;
+
   const lobbyRef = ref(db, "lobbies/" + currentLobby);
   await update(lobbyRef, {
     status: "choosingWord",
@@ -330,9 +331,12 @@ async function hostStartGame(lobby) {
     winner: ""
   });
 
-  // Resetear impostor a false para todos
+  // Resetear estado de jugadores (impostor y eliminado)
   const updates = {};
-  players.forEach(p => updates[`players/${p.id}/isImpostor`] = false);
+  players.forEach(p => {
+    updates[`players/${p.id}/isImpostor`] = false;
+    updates[`players/${p.id}/eliminated`] = false; // Resetear muerte
+  });
   await update(lobbyRef, updates);
 }
 
