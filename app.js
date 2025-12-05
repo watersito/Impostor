@@ -1,5 +1,5 @@
 import { db } from "./firebase.js";
-import { ref, set, get, update, remove, onValue, onDisconnect, child} from "https://www.gstatic.com/firebasejs/10.12.3/firebase-database.js";
+import { ref, set, get, update, remove, onValue, onDisconnect, child } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-database.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
 
 
@@ -21,25 +21,70 @@ let cachedLobby = null;
 
 
 
-function randomCode() { return Math.random().toString(36).substring(2,6).toUpperCase(); }
+function randomCode() { return Math.random().toString(36).substring(2, 6).toUpperCase(); }
 function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+// MODAL HELPER
+function promptModal(title, needsCode = false) {
+  return new Promise((resolve) => {
+    const modal = $("authModal");
+    const titleEl = $("modalTitle");
+    const nameInput = $("modalNameInput");
+    const codeInput = $("modalCodeInput");
+    const cancelBtn = $("modalCancelBtn");
+    const confirmBtn = $("modalConfirmBtn");
+
+    titleEl.textContent = title;
+    modal.classList.remove("hidden");
+    nameInput.value = "";
+
+    if (needsCode) {
+      codeInput.classList.remove("hidden");
+      codeInput.value = "";
+    } else {
+      codeInput.classList.add("hidden");
+    }
+
+    // Focus hack
+    setTimeout(() => nameInput.focus(), 50);
+
+    const close = (val) => {
+      modal.classList.add("hidden");
+      cancelBtn.onclick = null;
+      confirmBtn.onclick = null;
+      resolve(val);
+    };
+
+    cancelBtn.onclick = () => close(null);
+    confirmBtn.onclick = () => {
+      const name = nameInput.value.trim();
+      const code = needsCode ? codeInput.value.trim().toUpperCase() : null;
+
+      if (!name) { alert("El nombre no puede estar vacío"); return; }
+      if (needsCode && !code) { alert("El código es necesario"); return; }
+
+      close({ name, code });
+    };
+  });
+}
 
 // CREAR / UNIRSE A LOBBY
 $("createGame").onclick = async () => {
-  let nameInput = prompt("Tu nombre (máx. 10 caracteres):")?.trim();
-  if (!nameInput) nameInput = "Jugador";
-  myName = nameInput.slice(0, 10);
+  const result = await promptModal("Crear Partida");
+  if (!result) return; // Cancelado
+
+  myName = result.name.slice(0, 10);
   const code = randomCode();
   await createLobby(code, myName);
   enterLobby(code);
 };
 
 $("joinGame").onclick = async () => {
-  const code = (prompt("Código:")||"").trim().toUpperCase();
-  if (!code) return;
-  let nameInput = prompt("Tu nombre (máx. 10 caracteres):")?.trim();
-  if (!nameInput) nameInput = "Jugador";
-  myName = nameInput.slice(0, 10);
+  const result = await promptModal("Unirse a Partida", true);
+  if (!result) return;
+
+  myName = result.name.slice(0, 10);
+  const code = result.code;
   const ok = await joinLobby(code, myName);
   if (!ok) { alert("Lobby no existe o no se puede unir."); return; }
   enterLobby(code);
@@ -51,16 +96,18 @@ async function createLobby(code, playerName) {
   const snap = await get(lobbyRef);
   if (snap.exists()) return createLobby(randomCode());
   const player = { id: myPlayerId, name: playerName, isImpostor: false, joinedAt: Date.now() };
-  await set(lobbyRef, { 
-    hostId: myPlayerId, 
-    createdAt: Date.now(), 
-    status: "lobby", 
-    round: 0, 
-    word: "", 
+  await set(lobbyRef, {
+    hostId: myPlayerId,
+    createdAt: Date.now(),
+    status: "lobby",
+    round: 0,
+    word: "",
+    hint: "",
     wordChooser: "",
-    players: { [myPlayerId]: player }, 
-    votes: {}, 
-    results: {} 
+    settings: { impostorCount: 1, useHint: false },
+    players: { [myPlayerId]: player },
+    votes: {},
+    results: {}
   });
   const pRef = ref(db, `lobbies/${code}/players/${myPlayerId}`);
   onDisconnect(pRef).update({ connected: false });
@@ -98,10 +145,10 @@ function enterLobby(code) {
 }
 
 // SALIR DEL LOBBY
-async function leaveLobby(silent=false) {
+async function leaveLobby(silent = false) {
   if (!currentLobby) return;
   const playerRef = ref(db, `lobbies/${currentLobby}/players/${myPlayerId}`);
-  await remove(playerRef).catch(()=>{});
+  await remove(playerRef).catch(() => { });
   try {
     const lobbyRef = ref(db, "lobbies/" + currentLobby);
     const snap = await get(lobbyRef);
@@ -114,7 +161,7 @@ async function leaveLobby(silent=false) {
         await update(lobbyRef, { hostId: newHost });
       }
     }
-  } catch {}
+  } catch { }
   currentLobby = null; cachedLobby = null;
   if (unsubscribeLobby) unsubscribeLobby();
   unsubscribeLobby = null;
@@ -123,23 +170,28 @@ async function leaveLobby(silent=false) {
   if (!silent) alert("Has salido del lobby.");
 }
 async function closeLobby() {
-    if(!currentLobby) return;
-    const confirmClose = confirm("¿Seguro que quieres cerrar el lobby? Todos los jugadores serán expulsados.");
-    if(!confirmClose) return;
+  if (!currentLobby) return;
+  const confirmClose = confirm("¿Seguro que quieres cerrar el lobby? Todos los jugadores serán expulsados.");
+  if (!confirmClose) return;
 
-    const lobbyRef = ref(db, "lobbies/" + currentLobby);
-    await remove(lobbyRef);
+  const lobbyRef = ref(db, "lobbies/" + currentLobby);
+  await remove(lobbyRef);
 
-    // Salir del lobby localmente
-    currentLobby = null;
-    cachedLobby = null;
+  // Salir del lobby localmente
+  currentLobby = null;
+  cachedLobby = null;
 
-    if (unsubscribeLobby) unsubscribeLobby();
-    unsubscribeLobby = null;
+  if (unsubscribeLobby) unsubscribeLobby();
+  unsubscribeLobby = null;
 
-    $("game").classList.add("hidden");
-    $("menu").classList.remove("hidden");
-    alert("Lobby cerrado.");
+  $("game").classList.add("hidden");
+  $("menu").classList.remove("hidden");
+  alert("Lobby cerrado.");
+}
+
+async function updateSettings(code, newSettings) {
+  const lobbyRef = ref(db, "lobbies/" + code + "/settings");
+  await update(lobbyRef, newSettings);
 }
 
 
@@ -147,43 +199,92 @@ async function closeLobby() {
 function renderLobby(lobby) {
   const me = lobby.players?.[myPlayerId];
   const isImpostor = !!me?.isImpostor;
-if(lobby.status === "playing" || lobby.status === "reveal") {
-    $("roleBanner").textContent = "" //isImpostor ? "IMPOSTOR" : "CIUDADANO";
-    $("secretWord").style.color = isImpostor ? "red" : "green";
-} else {
-    $("roleBanner").textContent = "En el lobby";
-    $("roleBanner").style.color = "black";
-}  $("secretWord").textContent = (!isImpostor && lobby.word && (lobby.status === "playing" || lobby.status === "reveal")) ? lobby.word : "—";
-  if (isImpostor && lobby.status === "playing") $("secretWord").textContent = "No ves la palabra (eres impostor)";
+  const iAmHost = lobby.hostId === myPlayerId;
 
-  const players = Object.values(lobby.players || {}).sort((a,b)=>a.joinedAt-b.joinedAt);
+  // Manejo de Configuración
+  const settingsDiv = $("lobbySettings");
+  const impSelect = $("settingImpostorCount");
+  const hintCheck = $("settingUseHint");
+
+  if (lobby.status === "lobby") {
+    settingsDiv.classList.remove("hidden");
+    // Evitar sobrescribir si el usuario está interactuando activamente podría ser complejo,
+    // pero aquí asumimos actualización directa.
+    if (document.activeElement !== impSelect) impSelect.value = lobby.settings?.impostorCount || 1;
+    if (document.activeElement !== hintCheck) hintCheck.checked = !!lobby.settings?.useHint;
+
+    if (iAmHost) {
+      impSelect.disabled = false;
+      hintCheck.disabled = false;
+      impSelect.onchange = () => updateSettings(currentLobby, { impostorCount: parseInt(impSelect.value) });
+      hintCheck.onchange = () => updateSettings(currentLobby, { useHint: hintCheck.checked });
+    } else {
+      impSelect.disabled = true;
+      hintCheck.disabled = true;
+    }
+  } else {
+    settingsDiv.classList.add("hidden");
+  }
+
+
+  if (lobby.status === "playing" || lobby.status === "reveal") {
+    const roleText = isImpostor ? "IMPOSTOR" : "CIUDADANO";
+    $("roleBanner").textContent = roleText;
+    $("roleBanner").style.color = isImpostor ? "#ef4444" : "#10b981"; // red-500 : emerald-500
+    $("secretWord").style.color = isImpostor ? "#ef4444" : "#10b981";
+  } else {
+    $("roleBanner").textContent = "En el lobby";
+    $("roleBanner").style.color = "white";
+    $("secretWord").style.color = "white";
+  }
+
+  // Mostrar Palabra y Pista
+  const showWord = (!isImpostor && lobby.word && (lobby.status === "playing" || lobby.status === "reveal"));
+  $("secretWord").textContent = showWord ? lobby.word : "—";
+
+  if (isImpostor && lobby.status === "playing") {
+    $("secretWord").textContent = "No ves la palabra (eres impostor)";
+  }
+
+  // Render Hint
+  const hintContainer = $("hintContainer");
+  const secretHint = $("secretHint");
+  if ((lobby.status === "playing" || lobby.status === "reveal") && lobby.hint) {
+    hintContainer.classList.remove("hidden");
+    secretHint.textContent = lobby.hint;
+  } else {
+    hintContainer.classList.add("hidden");
+    secretHint.textContent = "";
+  }
+
+  const players = Object.values(lobby.players || {}).sort((a, b) => a.joinedAt - b.joinedAt);
   const playersList = $("playersList"); playersList.innerHTML = "";
- players.forEach(p => {
+  players.forEach(p => {
     const el = document.createElement("div");
     let text = p.name;
-    if(p.id === lobby.hostId) text += " 🏠"; // Host
-    if(p.id === myPlayerId) text += " (tú)";
+    if (p.id === lobby.hostId) text += " 🏠"; // Host
+    if (p.id === myPlayerId) text += " (tú)";
 
     // Tachado si el jugador fue eliminado
-    if(p.eliminated) el.style.textDecoration = "line-through";
+    if (p.eliminated) el.style.textDecoration = "line-through";
 
     el.textContent = text;
     // Emoji de calavera al lado si fue eliminado
-    if(p.eliminated) el.textContent += " ☠️";
+    if (p.eliminated) el.textContent += " ☠️";
     playersList.appendChild(el);
-});
+  });
 
   const buttonsContainer = $("gameButtons");
   buttonsContainer.innerHTML = "";
 
   // Botón host: empezar partida
-const iAmHost = lobby.hostId === myPlayerId;
-if (iAmHost && (lobby.status === "lobby" || lobby.status === "reveal")) {    const btn = document.createElement("button");
+  if (iAmHost && (lobby.status === "lobby" || lobby.status === "reveal")) {
+    const btn = document.createElement("button");
     btn.textContent = "Empezar partida";
     btn.className = "px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-500";
     btn.onclick = () => hostStartGame(lobby);
     buttonsContainer.appendChild(btn);
-// Botón cerrar lobby
+    // Botón cerrar lobby
     const closeBtn = document.createElement("button");
     closeBtn.textContent = "Cerrar lobby";
     closeBtn.className = "px-4 py-2 rounded bg-red-600 text-white hover:bg-red-500 ml-2";
@@ -193,7 +294,7 @@ if (iAmHost && (lobby.status === "lobby" || lobby.status === "reveal")) {    con
   }
 
   // Botón jugador elegido: escribir palabra
-  if(lobby.wordChooser === myPlayerId && lobby.status === "choosingWord") {
+  if (lobby.wordChooser === myPlayerId && lobby.status === "choosingWord") {
     const btn = document.createElement("button");
     btn.textContent = "Escribir palabra secreta";
     btn.className = "px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-500";
@@ -204,7 +305,7 @@ if (iAmHost && (lobby.status === "lobby" || lobby.status === "reveal")) {    con
   renderVotes(lobby);
 
   // Mostrar ganador si hay
-  if(lobby.status === "reveal") {
+  if (lobby.status === "reveal") {
     const winner = lobby.winner;
     $("roleBanner").textContent = winner === "ciudadanos" ? "¡Ciudadanos ganan!" : "¡Impostor gana!";
 
@@ -214,44 +315,63 @@ if (iAmHost && (lobby.status === "lobby" || lobby.status === "reveal")) {    con
 // HOST INICIA PARTIDA: se elige jugador aleatorio que escribirá palabra
 
 async function hostStartGame(lobby) {
-    const players = Object.values(lobby.players);
-    const alivePlayers = players.filter(p => !p.eliminated);
-    const chooser = pickRandom(alivePlayers).id;
-    const lobbyRef = ref(db, "lobbies/" + currentLobby);
-    await update(lobbyRef, { 
-        status: "choosingWord", 
-        wordChooser: chooser,
-        word: "",
-        round: 0,
-        votes: {},
-        results: {},
-        winner: ""
-    });
-    
-    // Resetear impostor a false para todos
-    const updates = {};
-    players.forEach(p => updates[`players/${p.id}/isImpostor`] = false);
-    await update(lobbyRef, updates);
+  const players = Object.values(lobby.players);
+  const alivePlayers = players.filter(p => !p.eliminated);
+  const chooser = pickRandom(alivePlayers).id;
+  const lobbyRef = ref(db, "lobbies/" + currentLobby);
+  await update(lobbyRef, {
+    status: "choosingWord",
+    wordChooser: chooser,
+    word: "",
+    hint: "",
+    round: 0,
+    votes: {},
+    results: {},
+    winner: ""
+  });
+
+  // Resetear impostor a false para todos
+  const updates = {};
+  players.forEach(p => updates[`players/${p.id}/isImpostor`] = false);
+  await update(lobbyRef, updates);
 }
 
 
 // JUGADOR ELIGIDO INGRESA PALABRA
 async function promptWordAndStart(lobby) {
-  const word = prompt("Introduce la palabra secreta:");
+  const word = prompt("Introduce la palabra secreta (NO la pista):");
   if (!word) return;
 
+  let hint = "";
+  if (lobby.settings?.useHint) {
+    hint = prompt("Introduce una Pista para todos (incluida la palabra secreta si quieres, o algo relacionado):");
+    if (!hint) hint = "Sin pista";
+  }
+
   const players = Object.values(lobby.players);
-  const impostorCandidate = players.filter(p => p.id !== myPlayerId);
-  const impostor = pickRandom(impostorCandidate).id;
+  const candidates = players.filter(p => p.id !== myPlayerId); // Excluir al que elige la palabra
+
+  // Determinar número de impostores
+  let count = lobby.settings?.impostorCount || 1;
+  // Asegurar que no haya más impostores que candidatos posibles (aunque candidates.length debería ser suficiente)
+  if (count > candidates.length) count = candidates.length;
+  if (count < 1) count = 1;
+
+  // Mezclar array y tomar N
+  const shuffled = candidates.sort(() => 0.5 - Math.random());
+  const selectedImpostors = shuffled.slice(0, count).map(p => p.id);
 
   const updates = {};
-  players.forEach(p => updates[`players/${p.id}/isImpostor`] = (p.id === impostor));
+  players.forEach(p => {
+    updates[`players/${p.id}/isImpostor`] = selectedImpostors.includes(p.id);
+  });
 
   const lobbyRef = ref(db, "lobbies/" + currentLobby);
   await update(lobbyRef, {
     status: "playing",
     round: 1,
     word: word,
+    hint: hint,
     ...updates
   });
 
@@ -263,19 +383,19 @@ async function promptWordAndStart(lobby) {
 function renderVotes(lobby) {
   const votePanel = $("votePanel"); const whoVoted = $("whoVoted");
   votePanel.innerHTML = ""; whoVoted.innerHTML = "";
-  if (lobby.status !== "playing" ) {
+  if (lobby.status !== "playing") {
     votePanel.textContent = "La votación estará disponible cuando inicie la partida.";
     return;
   }
   const roundKey = String(lobby.round || 1);
   const votes = lobby.votes?.[roundKey] || {};
-  const players = Object.values(lobby.players || {}).sort((a,b)=>a.joinedAt-b.joinedAt);
+  const players = Object.values(lobby.players || {}).sort((a, b) => a.joinedAt - b.joinedAt);
   const title = document.createElement("h3");
   title.textContent = "Elige a quién quieres votar:";
   title.className = "text-lg font-semibold mb-2 text-gray-800";
   votePanel.appendChild(title);
   players.filter(p => !p.eliminated).forEach(p => {
-    if(p.id === myPlayerId) return;
+    if (p.id === myPlayerId) return;
     const btn = document.createElement("button");
     btn.className = "block w-auto my-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:bg-gray-400";
     btn.textContent = p.name;
@@ -284,8 +404,8 @@ function renderVotes(lobby) {
     votePanel.appendChild(btn);
   });
   const votedPairs = Object.entries(votes).map(([voterId, targetId]) => {
-    const voter = lobby.players?.[voterId]?.name || voterId.slice(0,6);
-    const target = lobby.players?.[targetId]?.name || targetId.slice(0,6);
+    const voter = lobby.players?.[voterId]?.name || voterId.slice(0, 6);
+    const target = lobby.players?.[targetId]?.name || targetId.slice(0, 6);
     return `• ${voter} → ${target}`;
   });
   whoVoted.innerHTML = votedPairs.length ? votedPairs.join("<br>") : "Nadie ha votado aún.";
@@ -293,7 +413,7 @@ function renderVotes(lobby) {
 
 // FUNCION VOTAR
 async function castVote(targetId) {
-  if(!cachedLobby || cachedLobby.status !== "playing") return;
+  if (!cachedLobby || cachedLobby.status !== "playing") return;
   const roundKey = String(cachedLobby.round || 1);
   const voteRef = ref(db, `lobbies/${currentLobby}/votes/${roundKey}/${myPlayerId}`);
   await set(voteRef, targetId);
@@ -310,7 +430,7 @@ async function checkVotesAndResult() {
   const roundKey = String(lobby.round || 1);
   const votes = lobby.votes?.[roundKey] || {};
 
-  if(Object.keys(votes).length < players.length) return;
+  if (Object.keys(votes).length < players.length) return;
 
   // Contar votos 
   const voteCounts = {};
@@ -318,30 +438,43 @@ async function checkVotesAndResult() {
 
   let maxVotes = 0;
   let votedOutId = null;
-  Object.entries(voteCounts).forEach(([id,count])=>{
-    if(count > maxVotes) {
+  // En caso de empate, simple: el primero que encuentre (podría mejorarse)
+  Object.entries(voteCounts).forEach(([id, count]) => {
+    if (count > maxVotes) {
       maxVotes = count;
       votedOutId = id;
     }
   });
 
-  const impostor = players.find(p => p.isImpostor);
+  // Eliminar al votado
+  await update(ref(db, `lobbies/${currentLobby}/players/${votedOutId}`), { eliminated: true });
+
+  // Recalcular estado para ver si alguien gana
+  // Nota: players aquí es el snapshot viejo, mejor si tuviéramos el nuevo.
+  // Pero podemos simular la eliminación localmente para comprobar condición de victoria.
+  const updatedPlayers = players.map(p => {
+    if (p.id === votedOutId) return { ...p, eliminated: true };
+    return p;
+  });
+
+  const impostorsAlive = updatedPlayers.filter(p => p.isImpostor && !p.eliminated).length;
+  const citizensAlive = updatedPlayers.filter(p => !p.isImpostor && !p.eliminated).length;
+
   let result = "";
 
-  if(votedOutId === impostor.id) {
+  if (impostorsAlive === 0) {
     result = "ciudadanos";
-    // alert("¡Los ciudadanos han ganado! El impostor fue eliminado.");
-  } else {
-    const aliveCitizens = players.filter(p => !p.isImpostor);
-    if(aliveCitizens.length -1 <= 1) {
-      result = "impostor";
-      // alert("¡El impostor ha ganado!");
-    } else {
-      await update(ref(db, `lobbies/${currentLobby}/players/${votedOutId}`), { eliminated: true });
-      await update(ref(db, `lobbies/${currentLobby}`), { round: lobby.round + 1 });
-      return;
-    }
+  } else if (impostorsAlive >= citizensAlive) {
+    result = "impostors"; // Impostores ganan si igualan o superan en número (regla común Among Us)
+    // Ojo: En este juego de palabras, a veces la regla es distinta.
+    // El usuario dijo: "If the impostor survives until only 1 normal player is left, the impostor wins."
+    // Eso implica 1 impostor vs 1 ciudadano = Impostor wins. So impostorsAlive >= citizensAlive es correcto para N impostores.
   }
 
-  await update(ref(db, `lobbies/${currentLobby}`), { status: "reveal", winner: result });
+  if (result) {
+    await update(ref(db, `lobbies/${currentLobby}`), { status: "reveal", winner: result });
+  } else {
+    // Siguiente ronda
+    await update(ref(db, `lobbies/${currentLobby}`), { round: lobby.round + 1 });
+  }
 }
