@@ -166,16 +166,44 @@ function enterLobby(code) {
   if (shareBtn) {
     shareBtn.onclick = () => {
       const url = `${window.location.origin}${window.location.pathname}?lobby=${code}`;
-      navigator.clipboard.writeText(url).then(() => {
+
+      // Función auxiliar para feedback
+      const showFeedback = () => {
         const originalText = shareBtn.innerHTML;
         shareBtn.innerHTML = "<span>✅</span> Copiado!";
         setTimeout(() => shareBtn.innerHTML = originalText, 2000);
-      }).catch(err => {
-        console.error("Error copiando", err);
-        alert("Error copiando enlace: " + url);
-      });
+      };
+
+      // Intentar primero API moderna
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url)
+          .then(showFeedback)
+          .catch(() => fallbackCopy(url, showFeedback));
+      } else {
+        fallbackCopy(url, showFeedback);
+      }
     };
   }
+}
+
+function fallbackCopy(text, onSuccess) {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.position = "fixed"; // Evitar scroll
+  textArea.style.left = "-9999px";
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+
+  try {
+    const successful = document.execCommand('copy');
+    if (successful) onSuccess();
+    else prompt("Copia este enlace manualmante:", text);
+  } catch (err) {
+    prompt("Copia este enlace manualmante:", text);
+  }
+
+  document.body.removeChild(textArea);
 }
 
 // SALIR DEL LOBBY
