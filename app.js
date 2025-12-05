@@ -25,7 +25,7 @@ function randomCode() { return Math.random().toString(36).substring(2, 6).toUppe
 function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 // MODAL HELPER
-function promptModal(title, needsCode = false) {
+function promptModal(title, needsCode = false, defaultCode = "") {
   return new Promise((resolve) => {
     const modal = $("authModal");
     const titleEl = $("modalTitle");
@@ -40,7 +40,7 @@ function promptModal(title, needsCode = false) {
 
     if (needsCode) {
       codeInput.classList.remove("hidden");
-      codeInput.value = "";
+      codeInput.value = defaultCode || ""; // Pre-fill code
     } else {
       codeInput.classList.add("hidden");
     }
@@ -89,6 +89,25 @@ $("joinGame").onclick = async () => {
   if (!ok) { alert("Lobby no existe o no se puede unir."); return; }
   enterLobby(code);
 };
+
+// CHECK URL PARAMS
+window.onload = () => {
+  const params = new URLSearchParams(window.location.search);
+  const lobbyCode = params.get("lobby");
+  if (lobbyCode) {
+    // Auto-click join and pre-fill
+    // We can't auto-join without name, so just open modal
+    // But promptModal is async. We handle it here.
+    promptModal("Unirse con Invitación", true, lobbyCode).then(async (result) => {
+      if (!result) return;
+      myName = result.name.slice(0, 10);
+      const code = result.code;
+      const ok = await joinLobby(code, myName);
+      if (!ok) { alert("Lobby no existe o no se puede unir."); return; }
+      enterLobby(code);
+    });
+  }
+}
 
 // CREAR LOBBY
 async function createLobby(code, playerName) {
@@ -142,6 +161,21 @@ function enterLobby(code) {
   const playerRef = ref(db, `lobbies/${code}/players/${myPlayerId}`);
   update(playerRef, { connected: true });
 
+  // Share Button
+  const shareBtn = $("shareBtn");
+  if (shareBtn) {
+    shareBtn.onclick = () => {
+      const url = `${window.location.origin}${window.location.pathname}?lobby=${code}`;
+      navigator.clipboard.writeText(url).then(() => {
+        const originalText = shareBtn.innerHTML;
+        shareBtn.innerHTML = "<span>✅</span> Copiado!";
+        setTimeout(() => shareBtn.innerHTML = originalText, 2000);
+      }).catch(err => {
+        console.error("Error copiando", err);
+        alert("Error copiando enlace: " + url);
+      });
+    };
+  }
 }
 
 // SALIR DEL LOBBY
